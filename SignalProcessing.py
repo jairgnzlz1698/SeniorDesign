@@ -15,19 +15,20 @@ from datetime import timedelta
 from scipy import signal
 from joblib import load
 
+#filter used for heartrate noise reduction
 def filter_hr(df):
     
     c1 = signal.medfilt(df[:],kernel_size=5)
-    n1,w1 = signal.ellipord(0.88,0.96,3,100)
-    b, a = signal.ellip(n1,3,100,w1,'low')
-    c2 = signal.lfilter(b,a,c1)
-    c2 = signal.medfilt(c2[:],kernel_size=7)
-    plt.plot(df.index,df[:],linestyle='dashed',linewidth=1)
-    plt.plot(df.index,c1,linewidth=1)
-    plt.plot(df.index,c2,color='red',linewidth=1)
-    plt.yticks(np.arange(0,200,40))
-    plt.show()
-    return c2
+    #n1,w1 = signal.ellipord(0.88,0.96,3,100)
+    #b, a = signal.ellip(n1,3,100,w1,'low')
+    #c2 = signal.lfilter(b,a,c1)
+    #c2 = signal.medfilt(c2[:],kernel_size=7)
+    #plt.plot(df.index,df[:],linestyle='dashed',linewidth=1)
+    #plt.plot(df.index,c1,linewidth=1)
+    #plt.plot(df.index,c2,color='red',linewidth=1)
+    #plt.yticks(np.arange(0,200,40))
+    #plt.show()
+    return c1
 
 #Fourier transform and power spectral density feature extraction adapted from http://ataspinar.com/2018/04/04/machine-learning-with-signal-processing-techniques/
 def get_fftpeaks(df):
@@ -49,6 +50,7 @@ def get_fftpeaks(df):
     fft_peaksdf  = pd.DataFrame(fft_df[fft_peaks[0]],frequencies[fft_peaks[0]])
     return fft_peaksdf
 
+#Power spectral density feature extraction
 def get_psdpeaks(df):
     prom = 2
     t_n = 60
@@ -66,6 +68,7 @@ def get_psdpeaks(df):
         psd_peaks = find_peaks(psd_df[:],prominence=prom,distance=5)
     return psd_peaks
 
+#Jerk peak feature extraction
 def get_jerkpeaks(df):
     prom = 2
     df_p = np.diff(df)
@@ -79,14 +82,45 @@ def get_jerkpeaks(df):
     jerk_peaks_y = df_p[jerk_peaks[0]]
     return jerk_peaks_y
 
-input('Hold onto your butts')
+#number of times a dataset crosses the zero-axis is determined
+def get_zerocross(df):
+    zeroCross = 0
+    lastVal = 0
+    for i in df[:]:
+        if i < 0 and lastVal > 0:
+            zeroCross += 1
+        elif i > 0 and lastVal < 0:
+            zeroCross += 1
+        lastVal = i
+    return zeroCross
 
-acc = open('accelerometer_data_24_3.txt','r')
-gyr = open('gyroscope_data_24_3.txt','r')
+#the mean of the input data is determined (the input is one of sensor's readings along one axis)
+def get_mean(df):
+    sensorMean = np.mean(df)
+    return sensorMean
+
+
+#classifiying determines majority activity or the first activity (in the event of no majority)
+def classify(aP1,aP2,aP3):
+    if aP1 == aP2:
+        activity = aP1
+    elif aP1 == aP3:
+        activity = aP1
+    elif aP2 == aP3:
+        activity = aP2
+    else:
+        activity = aP1
+    return activity
+
+#Beginning of script file
+#opens data files
+acc = open('accelerometer_data_24_2.txt','r')
+gyr = open('gyroscope_data_24_2.txt','r')
 ppg = open('ppg_data_24_1.txt','r')
+#creates data file for results
 activities = open('activityData.txt','w')
-#ppg = open('ppg_data_24.txt','r')
-
+activities.write('Date, Activity, Heart rate\n')
+#importing trained model
 model = load('testmodel.joblib')
 
 acc.readline()
@@ -119,14 +153,17 @@ accdata = accdata.set_index(['datetime'])
 gyrdata = gyrdata.set_index(['datetime'])
 ppgdata = ppgdata.set_index(['datetime'])
 
+#the length of the chunk being processed can be changed to (preferably in multiples of 60 seconds)
+chunkLength = timedelta(seconds=120)
+
 timea = initialtime
 timeb = initialtime+timedelta(seconds=30)
 timec = initialtime+timedelta(seconds=60)
 timed = initialtime+timedelta(seconds=90)
 timee = initialtime+timedelta(seconds=120)
 #final plan to receive data composed of 2-minunte intervals: this script reads the entry files partitioned 2-minute intervals
-while (timea+timedelta(minutes=2))<finaltime:
-#    each 2-minute interval is partitioned into 3 chunks: each equal in time elapsed and with some overlap
+while (timea+timedelta(seconds=120))<finaltime:
+#    each interval is partitioned into 3 chunks: each equal in time elapsed and with some overlap
 #    each reading to be evaluated composed of sensor, direction, and partition (e.g. axp1 - accelerometer reading, x-direction, partition 1)
     
     axp1 = accdata.loc[timea:timec,'X']
@@ -148,10 +185,12 @@ while (timea+timedelta(minutes=2))<finaltime:
     gzp2 = gyrdata.loc[timeb:timed,'Z']
     gzp3 = gyrdata.loc[timec:timee,'Z']
     
-#    ppg reading only sensor reading to not be manipulated for feature extraction
+#    ppg reading is only sensor reading to not be manipulated for feature extraction
     ppg1 = ppgdata.loc[timea:timea+timedelta(minutes=2),'Heartrate']
-    ppgm= np.mean(ppg1)
-#    
+    partitionHeart= np.mean(ppg1)
+    
+    
+#all relevant features (in this case jerk peaks) are extracted    
     axp1_jerk = np.sort(get_jerkpeaks(axp1))[::-1]
     axp2_jerk = np.sort(get_jerkpeaks(axp2))[::-1]
     axp3_jerk = np.sort(get_jerkpeaks(axp3))[::-1]
@@ -172,26 +211,38 @@ while (timea+timedelta(minutes=2))<finaltime:
     gzp2_jerk = np.sort(get_jerkpeaks(gzp2))[::-1]
     gzp3_jerk = np.sort(get_jerkpeaks(gxp3))[::-1]
     
+#all features for each partition are concatenated to be fed simultaneously to classifying model    
     p1_jerk = np.concatenate((axp1_jerk,ayp1_jerk,azp1_jerk,gxp1_jerk,gyp1_jerk,gzp1_jerk))
     p2_jerk = np.concatenate((axp2_jerk,ayp2_jerk,azp2_jerk,gxp2_jerk,gyp2_jerk,gzp2_jerk))
     p3_jerk = np.concatenate((axp3_jerk,ayp3_jerk,azp3_jerk,gxp3_jerk,gyp3_jerk,gzp3_jerk))    
 
+#predictions to each partition are made using the features
     pred_par1 = model.predict(p1_jerk.reshape(1,-1))
     pred_par2 = model.predict(p2_jerk.reshape(1,-1))
     pred_par3 = model.predict(p3_jerk.reshape(1,-1))
     
+#the activity picked is either    
+    partitionActivity = classify(pred_par1,pred_par2,pred_par3)
+    partitionTime = timea.strftime('%m/%d/%y %H:%M:%S')
 #    pred_array = np.concatenate(pred_par1,pred_par2,pred_par3)
     
     
-#    activities.write()
+    #activities.write(partitionTime)
+    #activities.write(partitionActivity[0])
+    #activities.write(str(partitionHeart))
+    fileLine = partitionTime+", "+partitionActivity[0]+", "+str(partitionHeart)+"\n"
+    activities.write(fileLine)
     
-    timea += timedelta(minutes=2)
-    timeb += timedelta(minutes=2)
-    timec += timedelta(minutes=2)
-    timed += timedelta(minutes=2)
-    timee += timedelta(minutes=2)
+    #incrementing times for new chunk
+    timea += timedelta(seconds=120)
+    timeb += timedelta(seconds=120)
+    timec += timedelta(seconds=120)
+    timed += timedelta(seconds=120)
+    timee += timedelta(seconds=120)
 
-
+#closing input data files
 acc.close()
 gyr.close()
 ppg.close()
+#closing output file
+activities.close()
