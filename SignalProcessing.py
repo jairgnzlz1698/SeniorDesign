@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Spyder Editor
 
-This is a temporary script file.
-"""
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -138,8 +134,6 @@ ppgdata = pd.read_table(ppg,sep=",",index_col=False,names=['Time','Heartrate','d
 accdata.loc[:,'datetime'] = pd.to_datetime(accdata.loc[:,'Time'])#,'%m/%d/%y %H:%M:%S.%f')
 gyrdata.loc[:,'datetime'] = pd.to_datetime(gyrdata.loc[:,'Time'])#,'%m/%d/%y %H:%M:%S.%f')
 ppgdata.loc[:,'datetime'] = pd.to_datetime(ppgdata.loc[:,'Time'])
-#for i in range(0,len(ppgdata.index)):
-#    ppgdata.loc[i,'datetime'] = datetime.strptime(ppgdata.loc[i,'Time'],'%m/%d/%y %H:%M:%S.%f')
 
 #time rounding adapted from stackoverflow by Omnifarious
 #https://stackoverflow.com/questions/3463930/how-to-round-the-minute-of-a-datetime-object-python
@@ -224,12 +218,8 @@ while (timea+timedelta(seconds=120))<finaltime:
 #the activity picked is either    
     partitionActivity = classify(pred_par1,pred_par2,pred_par3)
     partitionTime = timea.strftime('%m/%d/%y %H:%M:%S')
-#    pred_array = np.concatenate(pred_par1,pred_par2,pred_par3)
     
-    
-    #activities.write(partitionTime)
-    #activities.write(partitionActivity[0])
-    #activities.write(str(partitionHeart))
+#writes findings from data to output file    
     fileLine = partitionTime+", "+partitionActivity[0]+", "+str(partitionHeart)+"\n"
     activities.write(fileLine)
     
