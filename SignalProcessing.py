@@ -36,12 +36,24 @@ def get_fftpeaks(df):
     frequencies = np.linspace(0.0,1.0/(2.0*T),N//2)
     fft_df_ = fft(df[:])
     fft_df = 2.0/N * np.abs(fft_df_[0:N//2])
+    promUp = 2
+    promDown = 0.1
+    overshootUp = False
+    overshootDown = False
     fft_peaks = find_peaks(fft_df[:],prominence=prom,distance=3)
     while len(fft_peaks[0])!=6:
         if len(fft_peaks[0])>6:
-            prom += 1
+            prom += promUp
+            overshootUp = True
+            if overshootDown:
+                promDown = promDown/2
+                overshootDown = False
         else: 
-            prom -= 0.0025
+            prom -= promDown
+            overshootDown = True
+            if overshootUp:
+                promUp = promUp/2
+                overshootUp = False
         fft_peaks = find_peaks(fft_df[:],prominence=prom,distance=3)
     fft_peaksdf  = pd.DataFrame(fft_df[fft_peaks[0]],frequencies[fft_peaks[0]])
     return fft_peaksdf
@@ -54,13 +66,24 @@ def get_psdpeaks(df):
     T = t_n/N
     f_s = 1/T
     psd_df = welch(df[:],fs = f_s)
-    plt.plot(psd_df[0],psd_df[1])
+    promUp = 2
+    promDown = 0.1
+    overshootUp = False
+    overshootDown = False
     psd_peaks = find_peaks(psd_df[:],prominence=prom,distance=5)
     while len(psd_peaks[0])!=6:
         if len(psd_peaks[0])>6:
-            prom += prom/2
+            prom += promUp
+            overshootUp = True
+            if overshootDown:
+                promDown = promDown/2
+                overshootDown = False
         else:
-            prom -= prom/2
+            prom -= promDown
+            overshootDown = True
+            if overshootUp:
+                promUp = promUp/2
+                overshootUp = False
         psd_peaks = find_peaks(psd_df[:],prominence=prom,distance=5)
     return psd_peaks
 
@@ -68,12 +91,24 @@ def get_psdpeaks(df):
 def get_jerkpeaks(df):
     prom = 2
     df_p = np.diff(df)
+    promUp = 2
+    promDown = 0.1
+    overshootUp = False
+    overshootDown = False
     jerk_peaks = find_peaks(df_p[:],prominence=prom,distance=5)
     while len(jerk_peaks[0])!=6:
         if len(jerk_peaks[0])>6:
-            prom += 1
+            prom += promUp
+            overshootUp = True
+            if overshootDown:
+                promDown = promDown/2
+                overshootDown = False
         else:
-            prom -= 0.0025
+            prom -= promDown
+            overshootDown = True
+            if overshootUp:
+                promUp = promUp/2
+                overshootUp = False
         jerk_peaks = find_peaks(df_p[:],prominence=prom,distance=5)
     jerk_peaks_y = df_p[jerk_peaks[0]]
     return jerk_peaks_y
@@ -110,9 +145,9 @@ def classify(aP1,aP2,aP3):
 
 #Beginning of script file
 #opens data files
-acc = open('accelerometer_data_24_2.txt','r')
-gyr = open('gyroscope_data_24_2.txt','r')
-ppg = open('ppg_data_24_1.txt','r')
+acc = open('accelerometer_data_24.txt','r')
+gyr = open('gyroscope_data_24.txt','r')
+ppg = open('ppg_data_24.txt','r')
 #creates data file for results
 activities = open('activityData.txt','w')
 activities.write('Date, Activity, Heart rate\n')
@@ -129,6 +164,14 @@ accdata = pd.read_table(acc,sep=",",index_col=False,names=['Time','X','Y','Z','d
 gyrdata = pd.read_table(gyr,sep=",",index_col=False,names=['Time','X','Y','Z','datetime'])
 ppgdata = pd.read_table(ppg,sep=",",index_col=False,names=['Time','Heartrate','datetime'])
 
+#closing input files
+acc.close()
+gyr.close()
+ppg.close()
+
+del acc
+del gyr
+del ppg
 
 #these statements assign the appropriate datetime for each data entry in each of the sensor readings
 accdata.loc[:,'datetime'] = pd.to_datetime(accdata.loc[:,'Time'])#,'%m/%d/%y %H:%M:%S.%f')
@@ -148,15 +191,15 @@ gyrdata = gyrdata.set_index(['datetime'])
 ppgdata = ppgdata.set_index(['datetime'])
 
 #the length of the chunk being processed can be changed to (preferably in multiples of 60 seconds)
-chunkLength = timedelta(seconds=120)
+chunkLength = 60
 
 timea = initialtime
-timeb = initialtime+timedelta(seconds=30)
-timec = initialtime+timedelta(seconds=60)
-timed = initialtime+timedelta(seconds=90)
-timee = initialtime+timedelta(seconds=120)
+timeb = initialtime+timedelta(seconds=chunkLength/4)
+timec = initialtime+timedelta(seconds=chunkLength/2)
+timed = initialtime+timedelta(seconds=3*chunkLength/4)
+timee = initialtime+timedelta(seconds=chunkLength)
 #final plan to receive data composed of 2-minunte intervals: this script reads the entry files partitioned 2-minute intervals
-while (timea+timedelta(seconds=120))<finaltime:
+while (timea+timedelta(seconds=chunkLength))<finaltime:
 #    each interval is partitioned into 3 chunks: each equal in time elapsed and with some overlap
 #    each reading to be evaluated composed of sensor, direction, and partition (e.g. axp1 - accelerometer reading, x-direction, partition 1)
     
@@ -169,6 +212,7 @@ while (timea+timedelta(seconds=120))<finaltime:
     azp1 = accdata.loc[timea:timec,'Z']
     azp2 = accdata.loc[timeb:timed,'Z']
     azp3 = accdata.loc[timec:timee,'Z']
+    
     gxp1 = gyrdata.loc[timea:timec,'X']
     gxp2 = gyrdata.loc[timeb:timed,'X']
     gxp3 = gyrdata.loc[timec:timee,'X']
@@ -179,8 +223,8 @@ while (timea+timedelta(seconds=120))<finaltime:
     gzp2 = gyrdata.loc[timeb:timed,'Z']
     gzp3 = gyrdata.loc[timec:timee,'Z']
     
-#    ppg reading is only sensor reading to not be manipulated for feature extraction
-    ppg1 = ppgdata.loc[timea:timea+timedelta(minutes=2),'Heartrate']
+#ppg reading is only sensor reading to not be manipulated for feature extraction
+    ppg1 = ppgdata.loc[timea:timee,'Heartrate']
     partitionHeart= np.mean(ppg1)
     
     
@@ -209,7 +253,7 @@ while (timea+timedelta(seconds=120))<finaltime:
     p1_jerk = np.concatenate((axp1_jerk,ayp1_jerk,azp1_jerk,gxp1_jerk,gyp1_jerk,gzp1_jerk))
     p2_jerk = np.concatenate((axp2_jerk,ayp2_jerk,azp2_jerk,gxp2_jerk,gyp2_jerk,gzp2_jerk))
     p3_jerk = np.concatenate((axp3_jerk,ayp3_jerk,azp3_jerk,gxp3_jerk,gyp3_jerk,gzp3_jerk))    
-
+    
 #predictions to each partition are made using the features
     pred_par1 = model.predict(p1_jerk.reshape(1,-1))
     pred_par2 = model.predict(p2_jerk.reshape(1,-1))
@@ -224,15 +268,11 @@ while (timea+timedelta(seconds=120))<finaltime:
     activities.write(fileLine)
     
     #incrementing times for new chunk
-    timea += timedelta(seconds=120)
-    timeb += timedelta(seconds=120)
-    timec += timedelta(seconds=120)
-    timed += timedelta(seconds=120)
-    timee += timedelta(seconds=120)
+    timea += timedelta(seconds=chunkLength)
+    timeb += timedelta(seconds=chunkLength)
+    timec += timedelta(seconds=chunkLength)
+    timed += timedelta(seconds=chunkLength)
+    timee += timedelta(seconds=chunkLength)
 
-#closing input data files
-acc.close()
-gyr.close()
-ppg.close()
 #closing output file
 activities.close()
